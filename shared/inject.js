@@ -16,7 +16,8 @@ export async function runInTab(tabId, action, arg) {
       window.UAEnvSwitcher
         ? window.UAEnvSwitcher.act(action, arg).catch(() => ({ error: 'action failed' }))
         : { error: 'not-loaded' },
-    args: [action, arg]
+    // undefined is not structured-cloneable — null is the neutral arg
+    args: [action, arg === undefined ? null : arg]
   });
   const r = results && results[0];
   return r && typeof r.result === 'object' && r.result !== null ? r.result : { error: 'no-result' };
