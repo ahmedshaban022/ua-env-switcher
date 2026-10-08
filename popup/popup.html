@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      width: 300px; margin: 0; padding: 14px;
+      font: 13px/1.4 system-ui, sans-serif; color: #e5e7eb;
+      background: #111827;
+    }
+    h1 { font-size: 13px; margin: 0 0 10px; color: #a78bfa; letter-spacing: .4px; }
+    .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11px; font-weight: 600; color: #d1d5db;
+      background: #1f2937; border: 1px solid #374151; border-radius: 999px;
+      padding: 2px 8px; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+    h2 {
+      font-size: 10px; margin: 14px 0 6px; color: #6b7280;
+      text-transform: uppercase; letter-spacing: .8px;
+    }
+    button {
+      padding: 7px 10px; border: 0; border-radius: 8px; cursor: pointer;
+      font: 600 12px system-ui, sans-serif;
+    }
+    .env {
+      display: flex; align-items: center; gap: 8px; width: 100%;
+      background: #1f2937; color: #e5e7eb; text-align: left; margin-bottom: 6px;
+    }
+    .env:hover { background: #374151; }
+    .env .name { font-weight: 600; }
+    .env .host { margin-left: auto; font-weight: 400; font-size: 11px; color: #9ca3af; }
+    #purge { background: #374151; color: #e5e7eb; width: 100%; }
+    #purge:hover { background: #4b5563; }
+    .prow { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+    .prow .pname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #d1d5db; }
+    .prow button { background: #374151; color: #e5e7eb; padding: 4px 10px; font-size: 11px; }
+    .prow button:hover { background: #4b5563; }
+    .saverow { display: flex; gap: 6px; }
+    .saverow input {
+      flex: 1; background: #1f2937; color: #e5e7eb; border: 1px solid #374151;
+      border-radius: 6px; padding: 5px 7px; font: 12px system-ui; min-width: 0;
+    }
+    .saverow button { background: #7c3aed; color: #fff; }
+    .saverow button:hover { background: #6d28d9; }
+    #undolink { background: none; border: 0; color: #a78bfa; font-size: 11px; padding: 2px 0; }
+    #undolink:hover { text-decoration: underline; }
+    .flag { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+    .flag .fkey { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #d1d5db; font-size: 12px; }
+    .flag input[type="text"] {
+      width: 110px; background: #1f2937; color: #e5e7eb; border: 1px solid #374151;
+      border-radius: 6px; padding: 3px 6px; font: 11px system-ui; min-width: 0;
+    }
+    input[type="checkbox"] { accent-color: #7c3aed; }
+    .empty { color: #6b7280; font-size: 11px; padding: 2px 0; }
+    #stats { margin-top: 10px; font-size: 12px; color: #9ca3af; min-height: 16px; }
+    #stats b { color: #4ade80; }
+    .hint { margin-top: 8px; font-size: 11px; color: #6b7280; }
+    .hint a { color: #a78bfa; cursor: pointer; text-decoration: none; }
+    .hint a:hover { text-decoration: underline; }
+    kbd { background: #1f2937; border-radius: 4px; padding: 1px 5px; font-size: 10px; }
+  </style>
+</head>
+<body>
+  <div class="head">
+    <h1 style="margin:0">UA ENV SWITCHER</h1>
+    <span class="chip" id="current"><span class="dot" style="background:#6b7280"></span>—</span>
+  </div>
+  <div id="envs"></div>
+  <div class="hint" id="route" style="margin:2px 0 0"></div>
+  <h2>Cache</h2>
+  <button id="purge">Purge SW caches &amp; hard reload</button>
+  <h2>Storage profiles</h2>
+  <div class="saverow">
+    <input id="pname" type="text" placeholder="Profile name…" maxlength="40" />
+    <button id="psave">Save current</button>
+  </div>
+  <div id="profiles" style="margin-top:6px"></div>
+  <button id="undolink" hidden>↩ Undo last apply</button>
+  <h2>Feature flags</h2>
+  <div id="flags"></div>
+  <div id="stats"></div>
+  <div class="hint">
+    <a id="manage">Manage environments…</a><br />
+    Shortcut: <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd>
+  </div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

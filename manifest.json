@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "UA Env Switcher",
+  "short_name": "UA Env Switcher",
+  "version": "1.0.0",
+  "description": "Hop the current tab between environments (localhost/staging/production) keeping the exact route, purge service-worker caches, swap storage profiles, and toggle feature flags.",
+  "permissions": ["activeTab", "scripting", "storage", "contextMenus"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "options_ui": {
+    "page": "pages/options.html",
+    "open_in_tab": true
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "UA Env Switcher (Alt+Shift+E to cycle environments)",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "commands": {
+    "cycle-env": {
+      "suggested_key": {
+        "default": "Alt+Shift+E"
+      },
+      "description": "Cycle the current tab to the next environment"
+    }
+  }
+}
