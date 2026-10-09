@@ -17,6 +17,16 @@ function hostOf(origin) {
   return origin.replace(/^https?:\/\//, '');
 }
 
+// Seeded defaults point at example.com until the user configures real
+// hosts — flag them so the first click doesn't feel like a bug.
+function isPlaceholder(origin) {
+  try {
+    return new URL(origin).hostname.endsWith('example.com');
+  } catch (_) {
+    return false;
+  }
+}
+
 let origin = null; // null on chrome:// pages and the like: actions disabled
 
 function disabledPage() {
@@ -79,7 +89,7 @@ function renderEnvs(envs, pageUrl) {
     btn.appendChild(name);
     const host = document.createElement('span');
     host.className = 'host';
-    host.textContent = hostOf(env.origin || '');
+    host.textContent = hostOf(env.origin || '') + (isPlaceholder(env.origin) ? ' · edit me' : '');
     btn.appendChild(host);
     btn.title = pageUrl ? switchUrl(pageUrl, env) || env.origin : env.origin;
     btn.addEventListener('click', async () => {
