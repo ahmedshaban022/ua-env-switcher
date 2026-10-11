@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "UA Env Switcher",
   "short_name": "UA Env Switcher",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Hop the current tab between environments (localhost/staging/production) keeping the exact route, purge service-worker caches, swap storage profiles, and toggle feature flags.",
   "permissions": ["activeTab", "scripting", "storage", "contextMenus"],
   "background": {

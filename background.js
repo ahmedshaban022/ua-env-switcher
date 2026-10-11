@@ -5,10 +5,12 @@
 
 import { DEFAULTS, MAX_PROFILES, matchEnv, nextEnv, switchUrl, urlOrigin } from './shared/envcore.js';
 import { runInTab } from './shared/inject.js';
+import { pageTab, requirePage, failure } from './shared/runtime.js';
 
-async function activeTab() {
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tabs[0] || null;
+async function activeTab(tabId) {
+  const tab = await pageTab(tabId);
+  requirePage(tab);
+  return tab;
 }
 
 async function getEnvs() {
@@ -84,22 +86,22 @@ async function doCycle() {
   return { url, env: target.name };
 }
 
-async function doPurge() {
-  const tab = await activeTab();
+async function doPurge(tabId) {
+  const tab = await activeTab(tabId);
   if (!tab || tab.id == null) return null;
-  const res = await runInTab(tab.id, 'purge').catch(() => null);
-  if (!res) return null;
+  const res = await runInTab(tab.id, 'purge');
+  if (!res || res.error) throw new Error(res && res.error || 'Could not purge this page.');
   await chrome.tabs.reload(tab.id, { bypassCache: true });
   return res;
 }
 
-async function doProfileSave(name) {
-  const tab = await activeTab();
+async function doProfileSave(name, tabId) {
+  const tab = await activeTab(tabId);
   const origin = tab && tab.url ? urlOrigin(tab.url) : null;
   if (!origin || !tab || tab.id == null) return { error: 'not-a-page' };
   const clean = String(name || '').trim().slice(0, 40);
   if (!clean) return { error: 'name-required' };
-  const snap = await runInTab(tab.id, 'ls-snapshot').catch(() => null);
+  const snap = await runInTab(tab.id, 'ls-snapshot');
   if (!snap || snap.error) return { error: 'snapshot-failed' };
   const profiles = await getLocal('profiles', []);
   const next = profiles.filter((p) => p && !(p.origin === origin && p.name === clean));
@@ -109,31 +111,31 @@ async function doProfileSave(name) {
   return { saved: true, total: next.length };
 }
 
-async function doProfileApply(name) {
-  const tab = await activeTab();
+async function doProfileApply(name, tabId) {
+  const tab = await activeTab(tabId);
   const origin = tab && tab.url ? urlOrigin(tab.url) : null;
   if (!origin || !tab || tab.id == null) return { error: 'not-a-page' };
   const profiles = await getLocal('profiles', []);
   const profile = profiles.find((p) => p && p.origin === origin && p.name === String(name || '').trim());
   if (!profile) return { error: 'not-found' };
-  const before = await runInTab(tab.id, 'ls-snapshot').catch(() => null);
+  const before = await runInTab(tab.id, 'ls-snapshot');
   if (before && !before.error) {
     await chrome.storage.local.set({ undo: { [origin]: { data: before, at: Date.now() } } });
   }
-  const res = await runInTab(tab.id, 'ls-apply', profile.data).catch(() => null);
+  const res = await runInTab(tab.id, 'ls-apply', profile.data);
   if (!res || res.error) return { error: 'apply-failed' };
   await chrome.tabs.reload(tab.id);
   return { applied: profile.name };
 }
 
-async function doProfileUndo() {
-  const tab = await activeTab();
+async function doProfileUndo(tabId) {
+  const tab = await activeTab(tabId);
   const origin = tab && tab.url ? urlOrigin(tab.url) : null;
   if (!origin || !tab || tab.id == null) return { error: 'not-a-page' };
   const undo = await getLocal('undo', {});
   const slot = undo && undo[origin];
   if (!slot || !slot.data) return { error: 'nothing-to-undo' };
-  const res = await runInTab(tab.id, 'ls-apply', slot.data).catch(() => null);
+  const res = await runInTab(tab.id, 'ls-apply', slot.data);
   if (!res || res.error) return { error: 'apply-failed' };
   delete undo[origin];
   await chrome.storage.local.set({ undo });
@@ -141,29 +143,29 @@ async function doProfileUndo() {
   return { undone: true };
 }
 
-async function doFlags() {
-  const tab = await activeTab();
+async function doFlags(tabId) {
+  const tab = await activeTab(tabId);
   if (!tab || tab.id == null) return null;
   const { flagPrefixes } = await chrome.storage.sync.get({ flagPrefixes: DEFAULTS.flagPrefixes });
-  return runInTab(tab.id, 'flags', { prefixes: flagPrefixes }).catch(() => null);
+  return runInTab(tab.id, 'flags', { prefixes: flagPrefixes });
 }
 
-async function doFlagSet(key, value) {
-  const tab = await activeTab();
+async function doFlagSet(key, value, tabId) {
+  const tab = await activeTab(tabId);
   if (!tab || tab.id == null) return null;
-  return runInTab(tab.id, 'flag-set', { key, value }).catch(() => null);
+  return runInTab(tab.id, 'flag-set', { key, value });
 }
 
 // ---------- wiring ----------
 
 chrome.commands.onCommand.addListener((command) => {
-  if (command === 'cycle-env') doCycle();
+  if (command === 'cycle-env') doCycle().catch(console.error);
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const pageUrl = info && info.pageUrl ? info.pageUrl : tab && tab.url;
   if (info.menuItemId === 'ua-es-purge') {
-    doPurge();
+    doPurge(tab && tab.id).catch(console.error);
     return;
   }
   if (typeof info.menuItemId === 'string' && info.menuItemId.startsWith('ua-es-env:')) {
@@ -175,10 +177,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (!msg || typeof msg.type !== 'string') return undefined;
-  const run = (p) => p.then(sendResponse).catch(() => sendResponse(null));
+  const run = (p) => p.then(sendResponse).catch((e) => sendResponse(failure(e)));
   if (msg.type === 'ua-es:switch') {
     run((async () => {
-      const tab = await activeTab();
+      const tab = await activeTab(msg.tabId);
       if (!tab || !tab.url || !urlOrigin(tab.url) || tab.id == null) return null;
       const url = await doSwitch(msg.envId, tab.url);
       if (!url) return null;
@@ -188,27 +190,27 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
   if (msg.type === 'ua-es:purge') {
-    run(doPurge());
+    run(doPurge(msg.tabId));
     return true;
   }
   if (msg.type === 'ua-es:profile-save') {
-    run(doProfileSave(msg.name));
+    run(doProfileSave(msg.name, msg.tabId));
     return true;
   }
   if (msg.type === 'ua-es:profile-apply') {
-    run(doProfileApply(msg.name));
+    run(doProfileApply(msg.name, msg.tabId));
     return true;
   }
   if (msg.type === 'ua-es:profile-undo') {
-    run(doProfileUndo());
+    run(doProfileUndo(msg.tabId));
     return true;
   }
   if (msg.type === 'ua-es:flags') {
-    run(doFlags());
+    run(doFlags(msg.tabId));
     return true;
   }
   if (msg.type === 'ua-es:flag-set') {
-    run(doFlagSet(msg.key, msg.value));
+    run(doFlagSet(msg.key, msg.value, msg.tabId));
     return true;
   }
   return undefined;

@@ -2,11 +2,13 @@
 // active tab, and delegates every action to the service worker (which owns
 // tab access and injection). The popup never talks to a tab directly.
 import { DEFAULTS, matchEnv, switchUrl, urlOrigin } from '../shared/envcore.js';
+import { request, showError, errorMessage } from '../shared/runtime.js';
 
 const $ = (id) => document.getElementById(id);
+let targetId = null;
 
 function send(type, extra) {
-  return chrome.runtime.sendMessage(Object.assign({ type }, extra || {})).catch(() => null);
+  return request(type, { tabId: targetId, ...extra });
 }
 
 function setStatus(html) {
@@ -35,6 +37,7 @@ function disabledPage() {
 
 async function init() {
   const tab = (await chrome.tabs.query({ active: true, currentWindow: true }))[0] || null;
+  targetId = tab && tab.id;
   const pageUrl = (tab && tab.url) || '';
   origin = urlOrigin(pageUrl);
 
@@ -46,6 +49,8 @@ async function init() {
   if (disabledPage()) {
     $('route').textContent = 'Open a normal http(s) page to switch environments.';
     $('psave').disabled = true;
+    $('purge').disabled = true;
+    $('stats').textContent = 'Open a website or localhost first. Local files and Chrome pages have no environment to switch.';
   } else {
     let route = '';
     try {
@@ -79,6 +84,7 @@ function renderEnvs(envs, pageUrl) {
     if (current && env.id === current.id) continue;
     const btn = document.createElement('button');
     btn.className = 'env';
+    btn.disabled = disabledPage();
     const d = document.createElement('span');
     d.className = 'dot';
     d.style.background = env.color || '#4ade80';
@@ -95,6 +101,7 @@ function renderEnvs(envs, pageUrl) {
     btn.addEventListener('click', async () => {
       if (disabledPage()) return;
       const res = await send('ua-es:switch', { envId: env.id });
+      if (showError($('stats'), res, 'Could not switch on this page.')) return;
       setStatus(res && res.url ? 'Switching to <b>' + env.name + '</b>…' : 'Could not switch on this page.');
     });
     box.appendChild(btn);
@@ -123,7 +130,9 @@ async function renderProfiles() {
     const apply = document.createElement('button');
     apply.textContent = 'Apply';
     apply.addEventListener('click', async () => {
-      setStatus((await send('ua-es:profile-apply', { name: p.name })) ? 'Applying profile…' : 'Could not apply.');
+      const res = await send('ua-es:profile-apply', { name: p.name });
+      if (showError($('stats'), res, 'Could not apply.')) return;
+      setStatus(res && !res.error ? 'Applying profile…' : 'Could not apply.');
     });
     row.appendChild(apply);
     box.appendChild(row);
@@ -138,7 +147,9 @@ async function renderProfiles() {
   const undoBtn = $('undolink');
   undoBtn.hidden = !slot;
   undoBtn.onclick = async () => {
-    setStatus((await send('ua-es:profile-undo')) ? 'Restoring…' : 'Nothing to restore.');
+    const res = await send('ua-es:profile-undo');
+    if (showError($('stats'), res, 'Nothing to restore.')) return;
+    setStatus(res && !res.error ? 'Restoring…' : 'Nothing to restore.');
   };
 }
 
@@ -146,6 +157,7 @@ async function renderFlags(prefixes) {
   const box = $('flags');
   box.textContent = '';
   const res = await send('ua-es:flags');
+  if (showError($('stats'), res, 'Could not read flags on this page.')) return;
   const flags = res && Array.isArray(res.flags) ? res.flags : [];
   if (!flags.length) {
     const empty = document.createElement('div');
@@ -166,14 +178,20 @@ async function renderFlags(prefixes) {
       const cb = document.createElement('input');
       cb.type = 'checkbox';
       cb.checked = !!f.on;
-      cb.addEventListener('change', () => send('ua-es:flag-set', { key: f.key, value: cb.checked ? 'true' : 'false' }));
+      cb.addEventListener('change', async () => {
+        const res = await send('ua-es:flag-set', { key: f.key, value: cb.checked ? 'true' : 'false' });
+        if (showError($('stats'), res, 'Could not update the flag.')) cb.checked = !cb.checked;
+      });
       row.appendChild(cb);
     } else {
       const input = document.createElement('input');
       input.type = 'text';
       input.value = f.preview;
       input.size = 1; // flex controls the real width
-      input.addEventListener('change', () => send('ua-es:flag-set', { key: f.key, value: input.value }));
+      input.addEventListener('change', async () => {
+        const res = await send('ua-es:flag-set', { key: f.key, value: input.value });
+        showError($('stats'), res, 'Could not update the flag.');
+      });
       row.appendChild(input);
     }
     box.appendChild(row);
@@ -184,6 +202,7 @@ $('psave').addEventListener('click', async () => {
   if (disabledPage()) return;
   const input = $('pname');
   const res = await send('ua-es:profile-save', { name: input.value });
+  if (showError($('stats'), res, 'Could not save on this page.')) return;
   if (res && res.saved) {
     input.value = '';
     setStatus('Profile saved.');
@@ -200,10 +219,14 @@ $('purge').addEventListener('click', async () => {
   }
   setStatus('Purging…');
   const res = await send('ua-es:purge');
-  if (res) setStatus('Purged <b>' + res.sw + '</b> service worker(s), <b>' + res.caches + '</b> cache(s). Reloading…');
-  else setStatus('Could not run on this page (try a normal http(s) page).');
+  if (showError($('stats'), res, 'Could not purge this page.')) return;
+  if (res && res.sw != null) {
+    setStatus('Purged <b>' + res.sw + '</b> service worker(s), <b>' + res.caches + '</b> cache(s). Reloading…');
+  } else {
+    setStatus('Could not run on this page (try a normal http(s) page).');
+  }
 });
 
 $('manage').addEventListener('click', () => chrome.runtime.openOptionsPage());
 
-init().catch(() => setStatus('Popup failed to start — try reopening it.'));
+init().catch((e) => ($('stats').textContent = errorMessage(e)));
